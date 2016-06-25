@@ -1,0 +1,10 @@
+This repository contains my solutions to exercises from
+Essentials of Programming Languages 2nd edition.
+
+A solution to the problem is in the corresponding chapter directory.
+Then look in the approriate section.scm file.
+
+
+It also contains code provided by the authors to run examples
+from the book.
+
