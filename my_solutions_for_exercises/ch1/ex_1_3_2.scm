@@ -111,3 +111,20 @@
 	  ((= pos 0) (car los))
 	  (else (los-ref (- pos 1) (cdr los))))))
 	  
+
+
+;;1.33
+(define var-redeclaration?
+  (lambda (exp)
+    (var-redeclaration-denv? exp '())))
+
+
+(define var-redeclaration-denv?
+  (lambda (exp denv)
+    (cond ((symbol? exp) #f)
+	  ((eqv? (car exp) 'lambda) (let ((pos (find-in-denv (caadr exp) denv)))
+				      (if (null? pos)
+					  (let ((new-denv (extend-denv (cadr exp) denv)))
+					    (var-redeclaration-denv? (caddr exp) new-denv))
+					  #t)))
+	  (else (or (var-redeclaration-denv? (car exp)) (var-redeclaration-denv? (cadr exp)))))))
