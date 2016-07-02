@@ -608,8 +608,45 @@
 
 
 ;;2.13
+(define-datatype term term?
+  (var-term
+   (id symbol?))
+  (constant-term
+   (datum constant?))
+  (app-term
+   (terms (list-of term?))))
+
+(define constant?
+  (lambda (datum)
+    (or (string? datum) (number? datum) (boolean? datum) (null? datum))))
+
+(define unparse-term
+  (lambda (trm)
+    (cases term trm
+	   (var-term (id)
+		     id)
+	   (constant-term (datum)
+			  datum)
+	   (app-term (terms)
+		     (map (lambda (t) (unparse-term t)) terms)))))
+
+(define parse-term
+  (lambda (datum)
+    (cond ((symbol? datum) (var-term datum))
+	  ((constant? datum) (constant-term datum))
+	  ((pair? datum) (app-term (map (lambda (t) (parse-term t)) datum)))
+	  (else
+	   (eopl:error "Invalid concrete syntax ~s"
+		       datum)))))
 
 
-
-
-				
+(define all-ids
+  (lambda (trm)
+    (cases term trm
+	   (var-term (id)
+		    (list id))
+	   (constant-term (datum)
+			  '())
+	   (app-term (terms)
+		     (accumulate union '()
+				 (map (lambda (t) (all-ids t)) terms))))))
