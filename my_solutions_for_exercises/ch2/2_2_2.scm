@@ -342,3 +342,274 @@
 
 
 ;;2.11
+;assume rator is not a lit-exp. Otherwise modify the predicate for rator in app-exp
+(define-datatype expression expression?
+  (lit-exp
+   (datum (lambda (datum) (and (integer? datum) (> datum 0)))))
+  (var-exp
+   (id symbol?))
+  (lambda-exp
+   (id symbol?)
+   (body expression?))
+  (app-exp
+   (rator expression?)
+   (rand  expression?))
+  (primapp-exp
+   (rator prim-rator?)
+   (rand1 expression?)
+   (rand2 expression?)))
+
+(define prim-rator?
+  (lambda (datum)
+    (and (symbol? datum) (or (eqv? datum '+) (eqv? datum '*)))))
+
+(define unparse-expression
+  (lambda (exp)
+    (cases expression exp
+	   (lit-exp (datum)
+		    datum)
+	   (var-exp (id)
+		    id)
+	   (lambda-exp (id body)
+		       (list 'lambda
+			     (list id)
+			     (unparse-expression body)))
+	   (app-exp (rator rand)
+		    (list (unparse-expression rator)
+			  (unparse-expression rand)))
+	   (primapp-exp (rator rand1 rand2)
+			 (list rator
+			       (unparse-expression rand1)
+			       (unparse-expression rand2))))))
+
+
+(define parse-expression
+  (lambda (datum)
+    (cond
+     ((number? datum) (lit-exp datum))
+     ((symbol? datum) (var-exp datum))
+     ((pair? datum)
+      (cond ((eqv? (car datum) 'lambda)
+	     (lambda-exp (caadr datum) (parse-expression (caddr datum))))
+	    ((prim-rator? (car datum)) (primapp-exp (car datum)
+						     (parse-expression (cadr datum))
+						     (parse-expression (caddr datum))))
+	    (else
+	     (app-exp (parse-expression (car datum)) (parse-expression (cadr datum))))))
+     (else
+      (eopl:error 'parse-expression
+		  "Invalid concrete syntax ~s" datum)))))
+
+
+(define all-ids
+  (lambda (exp)
+    (cases expression exp
+	   (var-exp (id)
+		    (list id))
+	   (lambda-exp (id body)
+		       (let ((all-ids-in-body (all-ids body)))
+			 (if (memv id all-ids-in-body)
+			     all-ids-in-body
+			     (cons id all-ids-in-body))))
+	   (app-exp (rator rand)
+		    (let ((all-ids-in-rator (all-ids rator))
+			  (all-ids-in-rand (all-ids rand)))
+		      (union all-ids-in-rator all-ids-in-rand)))
+	   (lit-exp (datum)
+		    '())
+	   (primapp-exp (prim rand1 rand2)
+			(union (all-ids rand1) (all-ids rand2))))))
+
+					;reuse fresh-id from previous exercise
+
+
+(define lambda-calculus-subst
+  (lambda (exp subst-exp subst-id)
+    (letrec
+	((subst
+	  (lambda (exp)
+	    (cases expression exp
+		   (var-exp (id)
+			    (if (eqv? id subst-id) subst-exp exp))
+		   (lambda-exp (id body)
+			       (if (eqv? id subst-id)
+				   exp
+				   (let ((new-id (fresh-id body (symbol->string id))))
+				     (let ((new-body (lambda-calculus-subst body (var-exp new-id) id)))
+				       (lambda-exp new-id (subst new-body))))))
+		   (app-exp (rator rand)
+			    (app-exp (subst rator) (subst rand)))
+		   (lit-exp (datum)
+			    (lit-exp datum))
+		   (primapp-exp (prim rand1 rand2)
+				(primapp-exp prim (subst rand1) (subst rand2)))
+		   ))))
+      (subst exp))))
+
+
+
+;;2.12
+;;Yes they use recursion explicitly.
+(define occurs-free?
+  (lambda (var exp)
+    (cases expression exp
+	   (var-exp (id)
+		    (eqv? id var))
+	   (lit-exp (datum)
+		    #f)
+	   (lambda-exp (id body)
+		       (and (not (eqv? id var))
+			    (occurs-free? var body)))
+	   (app-exp (rator rand)
+		    (or (occurs-free? var rator) (occurs-free? var rand)))
+	   (primapp-exp (prim rand1 rand2)
+			(and (not (eqv? prim var))
+			     (or (occurs-free? var rand1) (occurs-free? var rand2)))))))
+
+			     
+(define lambda-calculus-alpha
+  (lambda (exp)
+    (cases expression exp
+	   (var-exp (id)
+		    (eopl:error 'lambda-calculus-alpha
+				"Operator defined for lambda expression.Provided expression is a var-exp ~s"
+				exp))
+	   (lit-exp (datum)
+		    (eopl:error 'lambda-calculus-alpha
+				"Operator defined for lambda expression.Provided expression is a lit-exp ~s"
+				exp))
+	   (app-exp (rator rand)
+		    (eopl:error 'lambda-calculus-alpha
+				"Operator defined for lambda expression.Provided expression is a app-exp ~s"
+				exp))
+	   (primapp-exp (rator rand1 rand2)
+		    (eopl:error 'lambda-calculus-alpha
+				"Operator defined for lambda expression.Provided expression is a primapp-exp ~s"
+				exp))
+	   (lambda-exp (id body)
+		       (let ((fv (free-vars body))
+			     (aids (all-ids body)))
+			 (let ((not-free (diff aids fv)))
+			   (if (null? not-free)
+			       exp
+			       (lambda-exp (car not-free) (lambda-calculus-subst body (var-exp (car not-free)) id))))
+			 ))
+	   )))
+
+
+(define lambda-calculus-beta
+  (lambda (exp)
+    (cases expression exp
+	   (var-exp (id)
+		    (eopl:error 'lambda-calculus-beta
+				"Operator defined for application expression.Provided expression is a var-exp ~s"
+				exp))
+	   (lit-exp (datum)
+		    (eopl:error 'lambda-calculus-beta
+				"Operator defined for application expression.Provided expression is a lit-exp ~s"
+				exp))
+	   (lambda-exp (id body)
+		    (eopl:error 'lambda-calculus-beta
+				"Operator defined for application expression.Provided expression is a lambda-exp ~s"
+				exp))
+	   (primapp-exp (rator rand1 rand2)
+		    (eopl:error 'lambda-calculus-beta
+				"Operator defined for application expression.Provided expression is a primapp-exp ~s"
+				exp))
+	   (app-exp (rator rand)
+		    (let ((rator-exp rator))
+		      (cases expression rator-exp
+			   (var-exp (id)
+				    (eopl:error 'lambda-calculus-beta
+						"Invalid operator expression in app-exp ~s, operator should be lambda-exp, and not a var-exp ~s"
+						exp rator-exp))
+			   (lit-exp (datum)
+				    (eopl:error 'lambda-calculus-beta
+						"Invalid operator expression in app-exp ~s, operator should be lambda-exp, and not a lit-exp ~s"
+						exp rator-exp))
+			   (lambda-exp (id body)
+				       (lambda-calculus-subst body rand id))
+			   (primapp-exp (rator rand1 rand2)
+					(eopl:error 'lambda-calculus-beta
+						    "Invalid operator expression in app-exp ~s, operator should be lambda-exp, and not a primapp-exp ~s"
+						    exp rator-exp))
+			   (app-exp (rator rand)
+				    (eopl:error 'lambda-calculus-beta
+						"Invalid operator expression in app-exp ~s, operator should be lambda-exp, and not a app-exp ~s"
+						exp rator-exp))))))))
+
+(define lambda-calculus-eta
+  (lambda (exp)
+    (cases expression exp
+	   (var-exp (id)
+		    (eopl:error 'lambda-calculus-eta
+				"Operator defined for lambda expression.Provided expression is a var-exp ~s"
+				exp))
+	   (lit-exp (datum)
+		    (eopl:error 'lambda-calculus-eta
+				"Operator defined for lambda expression.Provided expression is a lit-exp ~s"
+				exp))
+	   (app-exp (rator rand)
+		    (eopl:error 'lambda-calculus-eta
+				"Operator defined for lambda expression.Provided expression is a app-exp ~s"
+				exp))
+	   (primapp-exp (rator rand1 rand2)
+		    (eopl:error 'lambda-calculus-eta
+				"Operator defined for lambda expression.Provided expression is a primapp-exp ~s"
+				exp))
+	   (lambda-exp (id body)
+		       (let ((body-exp body)
+			     (sid id))
+			 (cases expression body-exp
+				(var-exp (id)
+					 (eopl:error 'lambda-calculus-eta
+						     "Invalid body expression in lambda-exp ~s, body should be app-exp, and not a var-exp ~s"
+						     exp body-exp))
+				(lit-exp (datum)
+					 (eopl:error 'lambda-calculus-eta
+						     "Invalid body expression in lambda-exp ~s, body should be app-exp, and not a lit-exp ~s"
+						     exp body-exp))
+				(lambda-exp (id body)
+					 (eopl:error 'lambda-calculus-eta
+						     "Invalid body expression in lambda-exp ~s, body should be app-exp, and not a lambda-exp ~s"
+						     exp body-exp))
+				(primapp-exp (rator rand1 rand2)
+					     (eopl:error 'lambda-calculus-eta
+						    "Invalid body expression in lambda-exp ~s, body should be app-exp, and not a primapp-exp ~s"
+						    exp body-exp))
+				(app-exp (rator rand)
+					 (let ((rand-exp rand))
+					   (cases expression rand-exp
+						  (var-exp (id)
+							   (eopl:error 'lambda-calculus-eta
+								       (if (not (eqv? id sid))
+									   (eopl:error 'lambda-calculus-eta
+										       "Formal parameter id ~s and operand id ~s in body of lambda-exp ~s, should match"
+										       sid id body-exp)
+									   (if (not (occurs-free? id rator)) rator exp))))
+						  (lit-exp (datum)
+							   (eopl:error 'lambda-calculus-eta
+								       "Invalid operand expression in body of lambda-exp ~s, operand should be var-exp, and not a lit-exp ~s"
+								       exp rand-exp))
+						  (lambda-exp (id body)
+							      (eopl:error 'lambda-calculus-eta
+								       "Invalid operand expression in body of lambda-exp ~s, operand should be var-exp, and not a lambda-exp ~s"
+								       exp rand-exp))
+						  (primapp-exp (rator rand1 rand2)
+							       (eopl:error 'lambda-calculus-eta
+									   "Invalid operand expression in body of lambda-exp ~s, operand should be var-exp, and not a primapp-exp ~s"
+									   exp rand-exp))
+						  (app-exp (rator rand)
+							   (eopl:error 'lambda-calculus-eta
+								       "Invalid operand expression in body of lambda-exp ~s, operand should be var-exp, and not a app-exp ~s"
+								       exp rand-exp))))))))
+	   )))
+
+
+
+;;2.13
+
+
+
+
+				
