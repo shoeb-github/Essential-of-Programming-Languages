@@ -260,3 +260,85 @@
 
 
 ;;2.9
+(define-datatype expression expression?
+  (var-exp
+   (id symbol?))
+  (lambda-exp
+   (id symbol?)
+   (body expression?))
+  (app-exp
+   (rator expression?)
+   (rand  expression?)))
+
+
+(define parse-expression
+  (lambda (datum)
+    (cond ((symbol? datum) (var-exp datum))
+	  ((pair? datum)
+	   (cond ((eqv? (car datum) 'lambda)
+		  (if (pair? (cdr datum))
+		      (if (and (pair? (cadr datum)) (pair? (cddr datum)))
+			  (if (and (null? (cdadr datum)) (null? (cdddr datum)))
+			      (if (symbol? (caadr datum))
+				  (lambda-exp (caadr datum) (parse-expression (caddr datum)))
+				  (eopl:error 'parse-expression
+					      "Invalid concrete syntax for lambda expression ~s. Formal parameter ~s not an id" datum (caadr datum)))
+			      (eopl:error 'parse-expression
+					  "Invalid concrete syntax for lambda expression ~s. Formal parameter list ~s has more than one variable 
+                                           or body has more than one expression"
+					  datum (cadr datum) (cddr datum)))
+			  (eopl:error 'parse-expression
+				      "Invalid concrete syntax for lambda expression ~s. Formal parameter list:~s and body: ~s not correct syntax"
+				      datum (cadr datum) (cddr datum)))
+		      (eopl:error 'parse-expression
+				  "Invalid concrete syntax for lambda expression ~s" datum)))
+		 ((null? (cddr datum)) (app-exp (parse-expression (car datum))
+						(parse-expression (cadr datum))))
+		 (else
+		  (eopl:error 'parse-expression
+			      "Invalid concrete syntax ~s" datum))))
+	  (else
+	   (eopl:error 'parse-expression
+		       "Invalid concrete syntax ~s" datum)))))
+
+
+;;2.10
+(define-datatype expression expression?
+  (var-exp
+   (id symbol?))
+  (lambda-exp
+   (id symbol?)
+   (body expression?))
+  (app-exp
+   (rator expression?)
+   (rand  expression?)))
+
+(define fresh-id
+  (lambda (exp s)
+    (let ((syms (all-ids exp)))
+      (letrec
+	  ((loop (lambda (n)
+		   (let ((sym (string->symbol
+			       (string-append s
+					      (number->string n)))))
+		     (if (memv sym syms) (loop (+ n 1)) sym)))))
+	(loop 0)))))
+
+(define all-ids
+  (lambda (exp)
+    (cases expression exp
+	   (var-exp (id)
+		    (list id))
+	   (lambda-exp (id body)
+		       (let ((all-ids-in-body (all-ids body)))
+			 (if (memv id all-ids-in-body)
+			     all-ids-in-body
+			     (cons id all-ids-in-body))))
+	   (app-exp (rator rand)
+		    (let ((all-ids-in-rator (all-ids rator))
+			  (all-ids-in-rand (all-ids rand)))
+		      (union all-ids-in-rator all-ids-in-rand))))))
+
+
+
+;;2.11
