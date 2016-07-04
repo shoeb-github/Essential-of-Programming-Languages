@@ -174,3 +174,30 @@
 
 
 ;;2.25
+					;
+					;we need the memv test in unify term because consider
+					;t = 'a  --> this is var-term
+					;and u = ('a) --> this is app-term
+					;
+					;for any unifier s we have
+					;{(subs-in-term t s) = s(a)} != {(subst-in-term u s) = (s(a))}
+					;
+
+
+(define unit-subst
+  (lambda (tid u)
+    (extend-subst tid u (empty-subst))))
+
+
+
+(define compose-substs
+  (lambda (s1 s2)
+    (cases substitution s1
+	   (empty-substitution-record ()
+				      s2)
+	   (extended-sustitution-record (s1-sym s1-trm s1-subst)
+					(extend-subst s1-sym (subst-in-term s1-term s2) (compose-substs s1-subst s2))))))
+
+
+							 
+				      
